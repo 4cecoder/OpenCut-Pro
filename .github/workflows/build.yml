@@ -1,0 +1,74 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Sources/**'
+      - '.github/workflows/build.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'Sources/**'
+      - '.github/workflows/build.yml'
+
+env:
+  DEVELOPER_DIR: /Applications/Xcode_15.0.app/Contents/Developer
+
+jobs:
+  build-macos:
+    name: Build Release on macOS
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Cache Swift Packages
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: ${{ runner.os }}-spm-${{ hashFiles('Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+
+      - name: Build Release
+        run: swift build -c release
+
+      - name: Build App Bundle
+        run: |
+          swift build -c release --product FinalCutProClone
+          mkdir -p build/Release
+          cp -r .build/release/FinalCutProClone.app build/Release/ 2>/dev/null || echo "App bundle not found"
+
+      - name: Package Build Artifacts
+        run: |
+          cd build/Release
+          zip -r FinalCutProClone-macos.zip . -x "*.DS_Store"
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-macos
+          path: build/Release/FinalCutProClone-macos.zip
+          retention-days: 30
+
+  build-verification:
+    name: Verify Build Integrity
+    runs-on: macos-14
+    needs: build-macos
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Download Build Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-macos
+          path: build/artifacts
+
+      - name: Verify Artifacts
+        run: |
+          ls -la build/artifacts/
+          unzip -l build/artifacts/FinalCutProClone-macos.zip

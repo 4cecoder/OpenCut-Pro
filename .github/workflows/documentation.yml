@@ -1,0 +1,77 @@
+name: Documentation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Documentation/**'
+      - 'Sources/**'
+      - '.github/workflows/documentation.yml'
+
+env:
+  DEVELOPER_DIR: /Applications/Xcode_15.0.app/Contents/Developer
+
+jobs:
+  generate-docs:
+    name: Generate API Documentation
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Cache Swift Packages
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: ${{ runner.os }}-spm-${{ hashFiles('Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+
+      - name: Install Swift-DocC
+        run: |
+          swift package resolve
+          swift package show-dependencies | grep docc
+
+      - name: Generate Documentation
+        run: |
+          swift package generate-documentation --target FinalCutProClone \
+            --output-path docs \
+            --transform-for-static-hosting \
+            --hosting-base-path final-cut-pro-clone
+
+      - name: Copy Documentation Files
+        run: |
+          mkdir -p docs/additional
+          cp -r Documentation/* docs/additional/ 2>/dev/null || echo "No additional documentation"
+
+      - name: Upload Documentation
+        uses: actions/upload-artifact@v4
+        with:
+          name: documentation
+          path: docs/
+          retention-days: 30
+
+      - name: Deploy to GitHub Pages
+        if: github.ref == 'refs/heads/main'
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./docs
+
+  verify-docs:
+    name: Verify Documentation Coverage
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Check Documentation Coverage
+        run: |
+          swift package dump-source | jq '.targets[] | select(.type == "executable" or .type == "library") | .name'
+
+      - name: Check Missing Documentation
+        run: |
+          echo "Checking for undocumented public symbols..."
+          swift build 2>&1 | grep -i "warning: no documentation" || echo "All public symbols documented"

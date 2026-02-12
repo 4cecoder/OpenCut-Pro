@@ -1,0 +1,139 @@
+name: Code Quality
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Sources/**'
+      - 'Tests/**'
+      - '.github/workflows/code-quality.yml'
+      - '.swift-format'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'Sources/**'
+      - 'Tests/**'
+      - '.github/workflows/code-quality.yml'
+      - '.swift-format'
+
+env:
+  DEVELOPER_DIR: /Applications/Xcode_15.0.app/Contents/Developer
+
+jobs:
+  lint:
+    name: Swift Format Check
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Cache Swift Packages
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: ${{ runner.os }}-spm-${{ hashFiles('Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+
+      - name: Install swift-format
+        run: |
+          if ! command -v swift-format &> /dev/null; then
+            echo "Installing swift-format..."
+            git clone https://github.com/apple/swift-format.git /tmp/swift-format
+            cd /tmp/swift-format
+            git checkout swift-5.9-branch
+            swift build -c release
+            cp .build/release/swift-format /usr/local/bin/
+          fi
+          swift-format --version
+
+      - name: Check Code Format
+        run: |
+          if [ -f .swift-format ]; then
+            echo "Using project .swift-format configuration"
+            swift-format lint --recursive Sources Tests 2>&1 | tee lint-results.txt
+          else
+            echo "Using default swift-format configuration"
+            swift-format lint --recursive Sources Tests 2>&1 | tee lint-results.txt
+          fi
+
+      - name: Upload Lint Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lint-results
+          path: lint-results.txt
+          retention-days: 7
+
+      - name: Check Lint Errors
+        run: |
+          if grep -q "error:" lint-results.txt; then
+            echo "::error::Swift format errors found. Run 'swift-format format --recursive Sources Tests --in-place' to fix."
+            exit 1
+          fi
+
+  format-check:
+    name: Format Verification
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install swift-format
+        run: |
+          if ! command -v swift-format &> /dev/null; then
+            git clone https://github.com/apple/swift-format.git /tmp/swift-format
+            cd /tmp/swift-format
+            git checkout swift-5.9-branch
+            swift build -c release
+            cp .build/release/swift-format /usr/local/bin/
+          fi
+
+      - name: Verify Formatting
+        run: |
+          # Create a temporary copy to check formatting
+          mkdir -p /tmp/format-check
+          cp -r Sources Tests /tmp/format-check/
+
+          # Apply formatting to the copy
+          if [ -f .swift-format ]; then
+            swift-format format --recursive /tmp/format-check/Sources /tmp/format-check/Tests --in-place
+          else
+            swift-format format --recursive /tmp/format-check/Sources /tmp/format-check/Tests --in-place
+          fi
+
+          # Compare with original
+          if ! diff -r Sources /tmp/format-check/Sources > /dev/null 2>&1 || ! diff -r Tests /tmp/format-check/Tests > /dev/null 2>&1; then
+            echo "::error::Code is not properly formatted. Run 'swift-format format --recursive Sources Tests --in-place' to fix."
+            diff -r Sources /tmp/format-check/Sources || true
+            diff -r Tests /tmp/format-check/Tests || true
+            exit 1
+          fi
+
+          echo "✅ Code is properly formatted"
+
+  swiftlint:
+    name: SwiftLint Analysis
+    runs-on: macos-14
+    continue-on-error: true
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install SwiftLint
+        run: |
+          if ! command -v swiftlint &> /dev/null; then
+            brew install swiftlint
+          fi
+          swiftlint --version
+
+      - name: Run SwiftLint
+        run: |
+          if [ -f .swiftlint.yml ]; then
+            swiftlint lint --reporter github-actions-logging
+          else
+            swiftlint lint --reporter github-actions-logging --path Sources
+          fi
