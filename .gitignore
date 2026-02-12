@@ -77,3 +77,15 @@ Documentation/.build/
 # Test output
 *.xccoverage
 *.xcresult
+
+# Build artifacts
+*.d
+*.dia
+*.swiftdeps
+*.o
+*.swiftmodule
+*.swiftdoc
+*.abi.json
+
+# App bundles
+*.app/
