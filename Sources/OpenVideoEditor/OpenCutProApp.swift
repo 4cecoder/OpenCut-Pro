@@ -7,7 +7,7 @@ struct OpenCutProApp: App {
     
     var body: some Scene {
         WindowGroup {
-            MainWindowView()
+            MainWorkspaceView()
                 .environmentObject(appState)
                 .frame(minWidth: 1400, minHeight: 900)
         }

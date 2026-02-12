@@ -414,8 +414,45 @@ class AppState: ObservableObject {
     @Published var collaborators: [Collaborator] = []
     @Published var comments: [Comment] = []
     
+    // Timeline
+    @Published var timelineClips: [[TimelineClipItem]] = Array(repeating: [], count: 6)
+    
+    // Alerts
+    @Published var showComingSoonAlert = false
+    @Published var comingSoonMessage = ""
+    
     // Editor
     var editor: VideoEditor?
+    
+    // MARK: - Functional Methods
+    
+    func addClipToTimeline(index: Int) {
+        let colors: [Color] = [.blue, .green, .orange, .purple, .pink, .cyan]
+        let newClip = TimelineClipItem(
+            name: "Clip_\(String(format: "%03d", index + 1))",
+            duration: CGFloat.random(in: 100...300),
+            startPosition: CGFloat.random(in: 0...1000),
+            color: colors[index % colors.count]
+        )
+        timelineClips[0].append(newClip)
+    }
+    
+    func togglePlayback() {
+        isPlaying.toggle()
+    }
+    
+    func previousFrame() {
+        currentTime -= 1/30
+    }
+    
+    func nextFrame() {
+        currentTime += 1/30
+    }
+    
+    func showComingSoon(_ message: String) {
+        comingSoonMessage = message
+        showComingSoonAlert = true
+    }
     
     // Methods
     func createNewProject(name: String, resolution: VideoSize, frameRate: Double) {
@@ -553,6 +590,14 @@ struct Comment: Identifiable {
     let text: String
     let timestamp: TimeInterval
     let isResolved: Bool
+}
+
+struct TimelineClipItem: Identifiable {
+    let id = UUID()
+    let name: String
+    let duration: CGFloat
+    let startPosition: CGFloat
+    let color: Color
 }
 
 // This file will be expanded with MainWorkspaceView.swift
