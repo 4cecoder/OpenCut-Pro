@@ -4,7 +4,7 @@ import PackageDescription
 let package = Package(
     name: "OpenVideoEditor",
     platforms: [
-        .macOS(.v14)
+        .macOS(.v13)
     ],
     products: [
         .executable(name: "open-video-editor", targets: ["OpenVideoEditor"]),

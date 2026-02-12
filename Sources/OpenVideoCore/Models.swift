@@ -1,11 +1,14 @@
 import Foundation
+#if canImport(CoreGraphics)
+import CoreGraphics
+#endif
 
 // MARK: - Core Models
 
 public struct VideoProject: Codable, Identifiable {
     public let id: UUID
     public var name: String
-    public var resolution: CGSize
+    public var resolution: VideoSize
     public var frameRate: Double
     public var duration: TimeInterval
     public var createdAt: Date
@@ -13,7 +16,7 @@ public struct VideoProject: Codable, Identifiable {
     public var timeline: Timeline
     public var exportSettings: ExportSettings
     
-    public init(id: UUID = UUID(), name: String, resolution: CGSize, frameRate: Double, duration: TimeInterval = 0) {
+    public init(id: UUID = UUID(), name: String, resolution: VideoSize, frameRate: Double, duration: TimeInterval = 0) {
         self.id = id
         self.name = name
         self.resolution = resolution
@@ -26,7 +29,7 @@ public struct VideoProject: Codable, Identifiable {
     }
 }
 
-public struct CGSize: Codable {
+public struct VideoSize: Codable {
     public var width: Double
     public var height: Double
     
@@ -86,7 +89,7 @@ public struct VideoClip: Identifiable, Codable {
     public var sourceDuration: TimeInterval
     public var startTime: TimeInterval
     public var endTime: TimeInterval
-    public var resolution: CGSize?
+    public var resolution: VideoSize?
     public var frameRate: Double?
     public var effects: [Effect]
     public var transitions: [Transition]
@@ -96,7 +99,7 @@ public struct VideoClip: Identifiable, Codable {
         return endTime - startTime
     }
     
-    public init(id: UUID = UUID(), filePath: String, sourceDuration: TimeInterval, startTime: TimeInterval = 0, endTime: TimeInterval? = nil, resolution: CGSize? = nil, frameRate: Double? = nil) {
+    public init(id: UUID = UUID(), filePath: String, sourceDuration: TimeInterval, startTime: TimeInterval = 0, endTime: TimeInterval? = nil, resolution: VideoSize? = nil, frameRate: Double? = nil) {
         self.id = id
         self.filePath = filePath
         self.sourceDuration = sourceDuration
