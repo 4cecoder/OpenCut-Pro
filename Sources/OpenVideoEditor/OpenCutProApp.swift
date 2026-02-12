@@ -7,14 +7,21 @@ struct OpenCutProApp: App {
     
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            MainWindowView()
                 .environmentObject(appState)
-                .frame(minWidth: 1200, minHeight: 800)
+                .frame(minWidth: 1400, minHeight: 900)
         }
         .windowStyle(.titleBar)
+        .defaultSize(width: 1600, height: 1000)
         .commands {
+            buildCommands()
+        }
+    }
+    
+    private func buildCommands() -> some Commands {
+        Group {
             CommandGroup(replacing: .newItem) {
-                Button("New Project") {
+                Button("New Project...") {
                     appState.showNewProjectSheet = true
                 }
                 .keyboardShortcut("n", modifiers: .command)
@@ -24,184 +31,214 @@ struct OpenCutProApp: App {
                 }
                 .keyboardShortcut("o", modifiers: .command)
                 
-                Button("Save Project") {
+                Divider()
+                
+                Button("Save") {
                     appState.saveProject()
                 }
                 .keyboardShortcut("s", modifiers: .command)
+                
+                Button("Save As...") {
+                    appState.saveProjectAs()
+                }
+                .keyboardShortcut("s", modifiers: [.command, .shift])
             }
             
             CommandMenu("Edit") {
-                Button("Undo") {
-                    appState.undo()
-                }
-                .keyboardShortcut("z", modifiers: .command)
+                Button("Undo") { appState.undo() }
+                    .keyboardShortcut("z", modifiers: .command)
                 
-                Button("Redo") {
-                    appState.redo()
-                }
-                .keyboardShortcut("z", modifiers: [.command, .shift])
+                Button("Redo") { appState.redo() }
+                    .keyboardShortcut("z", modifiers: [.command, .shift])
                 
                 Divider()
                 
-                Button("Cut") {
-                    appState.cut()
-                }
-                .keyboardShortcut("x", modifiers: .command)
+                Button("Cut") { appState.cut() }
+                    .keyboardShortcut("x", modifiers: .command)
                 
-                Button("Copy") {
-                    appState.copy()
-                }
-                .keyboardShortcut("c", modifiers: .command)
+                Button("Copy") { appState.copy() }
+                    .keyboardShortcut("c", modifiers: .command)
                 
-                Button("Paste") {
-                    appState.paste()
-                }
-                .keyboardShortcut("v", modifiers: .command)
+                Button("Paste") { appState.paste() }
+                    .keyboardShortcut("v", modifiers: .command)
                 
-                Button("Delete") {
-                    appState.deleteSelection()
-                }
-                .keyboardShortcut(.delete, modifiers: .command)
+                Button("Paste Attributes") { appState.pasteAttributes() }
+                    .keyboardShortcut("v", modifiers: [.command, .shift, .option])
+                
+                Divider()
+                
+                Button("Delete") { appState.deleteSelection() }
+                    .keyboardShortcut(.delete, modifiers: .command)
+                
+                Button("Ripple Delete") { appState.rippleDelete() }
+                    .keyboardShortcut(.delete, modifiers: [.command, .shift])
+                
+                Button("Select All") { appState.selectAll() }
+                    .keyboardShortcut("a", modifiers: .command)
+                
+                Button("Deselect All") { appState.deselectAll() }
+                    .keyboardShortcut("a", modifiers: [.command, .shift])
             }
             
-            CommandMenu("View") {
-                Button("Toggle Browser") {
-                    appState.showBrowser.toggle()
-                }
-                .keyboardShortcut("1", modifiers: .command)
+            CommandMenu("Trim") {
+                Button("Trim Start") { appState.trimStart() }
+                    .keyboardShortcut("[", modifiers: .command)
                 
-                Button("Toggle Viewer") {
-                    appState.showViewer.toggle()
-                }
-                .keyboardShortcut("2", modifiers: .command)
+                Button("Trim End") { appState.trimEnd() }
+                    .keyboardShortcut("]", modifiers: .command)
                 
-                Button("Toggle Timeline") {
-                    appState.showTimeline.toggle()
-                }
-                .keyboardShortcut("3", modifiers: .command)
+                Button("Trim to Selection") { appState.trimToSelection() }
+                    .keyboardShortcut("t", modifiers: .command)
                 
-                Button("Toggle Inspector") {
-                    appState.showInspector.toggle()
-                }
-                .keyboardShortcut("4", modifiers: .command)
+                Button("Extend Edit") { appState.extendEdit() }
+                    .keyboardShortcut("e", modifiers: .command)
                 
                 Divider()
                 
-                Button("Enter Full Screen") {
-                    appState.toggleFullscreen()
-                }
-                .keyboardShortcut("f", modifiers: [.command, .control])
+                Button("Blade") { appState.splitClip() }
+                    .keyboardShortcut("b", modifiers: .command)
+                
+                Button("Blade All") { appState.splitAll() }
+                    .keyboardShortcut("b", modifiers: [.command, .shift])
+                
+                Button("Join Clips") { appState.joinClips() }
+                    .keyboardShortcut("j", modifiers: .command)
+                
+                Divider()
+                
+                Button("Lift from Storyline") { appState.lift() }
+                    .keyboardShortcut(.upArrow, modifiers: .command)
+                
+                Button("Overwrite to Primary Storyline") { appState.overwrite() }
+                    .keyboardShortcut(.downArrow, modifiers: .command)
             }
             
             CommandMenu("Mark") {
-                Button("Set Marker") {
-                    appState.setMarker()
-                }
-                .keyboardShortcut("m", modifiers: .command)
+                Button("Set Marker") { appState.setMarker() }
+                    .keyboardShortcut("m", modifiers: .command)
                 
-                Button("Next Marker") {
-                    appState.nextMarker()
-                }
-                .keyboardShortcut(.rightArrow, modifiers: .command)
+                Button("Set Chapter Marker") { appState.setChapterMarker() }
+                    .keyboardShortcut("m", modifiers: [.command, .option])
                 
-                Button("Previous Marker") {
-                    appState.previousMarker()
-                }
-                .keyboardShortcut(.leftArrow, modifiers: .command)
-            }
-            
-            CommandMenu("Modify") {
-                Button("Split Clip") {
-                    appState.splitClip()
-                }
-                .keyboardShortcut("b", modifiers: .command)
-                
-                Button("Join Clips") {
-                    appState.joinClips()
-                }
-                .keyboardShortcut("j", modifiers: .command)
+                Button("Delete Marker") { appState.deleteMarker() }
+                    .keyboardShortcut("m", modifiers: [.command, .shift])
                 
                 Divider()
                 
-                Button("Trim to Selection") {
-                    appState.trimToSelection()
-                }
-                .keyboardShortcut("t", modifiers: .command)
+                Button("Next Marker") { appState.nextMarker() }
+                    .keyboardShortcut(.rightArrow, modifiers: .command)
                 
-                Button("Extend Edit") {
-                    appState.extendEdit()
-                }
-                .keyboardShortcut("e", modifiers: .command)
+                Button("Previous Marker") { appState.previousMarker() }
+                    .keyboardShortcut(.leftArrow, modifiers: .command)
+                
+                Divider()
+                
+                Button("Mark Selection") { appState.markSelection() }
+                    .keyboardShortcut("x", modifiers: [.command, .option])
+            }
+            
+            CommandMenu("View") {
+                Button("Show/Hide Browser") { appState.showBrowser.toggle() }
+                    .keyboardShortcut("1", modifiers: .command)
+                
+                Button("Show/Hide Viewer") { appState.showViewer.toggle() }
+                    .keyboardShortcut("2", modifiers: .command)
+                
+                Button("Show/Hide Timeline") { appState.showTimeline.toggle() }
+                    .keyboardShortcut("3", modifiers: .command)
+                
+                Button("Show/Hide Inspector") { appState.showInspector.toggle() }
+                    .keyboardShortcut("4", modifiers: .command)
+                
+                Button("Show/Hide Color Inspector") { appState.showColorInspector.toggle() }
+                    .keyboardShortcut("5", modifiers: .command)
+                
+                Button("Show/Hide Audio Meters") { appState.showAudioMeters.toggle() }
+                    .keyboardShortcut("6", modifiers: .command)
+                
+                Divider()
+                
+                Button("Viewer Display Size: 25%") { appState.viewerScale = 0.25 }
+                
+                Button("Viewer Display Size: 50%") { appState.viewerScale = 0.5 }
+                    .keyboardShortcut("minus", modifiers: .command)
+                
+                Button("Viewer Display Size: 100%") { appState.viewerScale = 1.0 }
+                
+                Button("Viewer Display Size: 200%") { appState.viewerScale = 2.0 }
+                    .keyboardShortcut("plus", modifiers: .command)
+                
+                Divider()
+                
+                Button("Show in Finder") { appState.showInFinder() }
+                .keyboardShortcut("f", modifiers: [.command, .shift])
+            }
+            
+            CommandMenu("Window") {
+                Button("Minimize") { }
+                    .keyboardShortcut("m", modifiers: .command)
+                
+                Button("Zoom") { }
+                
+                Divider()
+                
+                Button("Show Events") { }
+                
+                Button("Show Project Timeline") { }
+                
+                Button("Show Retime Editor") { }
             }
             
             CommandMenu("Share") {
-                Button("Export File...") {
-                    appState.showExportSheet = true
-                }
-                .keyboardShortcut("e", modifiers: [.command, .shift])
+                Button("Export File...") { appState.showExportSheet = true }
+                    .keyboardShortcut("e", modifiers: [.command, .shift])
                 
-                Button("Export Settings...") {
-                    appState.showExportSettings = true
-                }
+                Button("Export Settings...") { appState.showExportSettings = true }
+                
+                Button("Send to Compressor") { }
+                
+                Button("Publish to YouTube") { }
+                
+                Button("Publish to Vimeo") { }
             }
         }
     }
 }
-
-// MARK: - App State
-
-@MainActor
-class AppState: ObservableObject {
-    @Published var currentProject: VideoProject?
-    @Published var currentTime: TimeInterval = 0
-    @Published var isPlaying = false
-    @Published var selectedClips: Set<UUID> = []
-    @Published var zoomLevel: Double = 1.0
-    @Published var showBrowser = true
-    @Published var showViewer = true
-    @Published var showTimeline = true
-    @Published var showInspector = true
-    @Published var showNewProjectSheet = false
-    @Published var showExportSheet = false
-    @Published var showExportSettings = false
-    @Published var exportProgress: Double = 0
-    @Published var isExporting = false
-    
-    var editor: VideoEditor?
-    
-    func createNewProject(name: String, resolution: VideoSize, frameRate: Double) {
-        let project = VideoProject(name: name, resolution: resolution, frameRate: frameRate)
-        currentProject = project
-        editor = VideoEditor(project: project)
-    }
-    
-    func openProject(url: URL) async throws {
-        let fileManager = DefaultVideoFileManager()
-        let project = try await fileManager.loadProject(from: url)
-        currentProject = project
-        editor = VideoEditor(project: project)
-    }
-    
-    func saveProject() {
-        // Implementation
-    }
-    
-    func showOpenProjectDialog() {
-        // Implementation
-    }
-    
+    func saveProjectAs() { }
+    func showOpenProjectDialog() { }
+    func showInFinder() { }
     func undo() { }
     func redo() { }
     func cut() { }
     func copy() { }
     func paste() { }
+    func pasteAttributes() { }
     func deleteSelection() { }
-    func toggleFullscreen() { }
-    func setMarker() { }
-    func nextMarker() { }
-    func previousMarker() { }
-    func splitClip() { }
-    func joinClips() { }
+    func rippleDelete() { }
+    func selectAll() { }
+    func deselectAll() { }
+    func trimStart() { }
+    func trimEnd() { }
     func trimToSelection() { }
     func extendEdit() { }
+    func splitClip() { }
+    func splitAll() { }
+    func joinClips() { }
+    func lift() { }
+    func overwrite() { }
+    func setMarker() { }
+    func setChapterMarker() { }
+    func deleteMarker() { }
+    func nextMarker() { }
+    func previousMarker() { }
+    func markSelection() { }
+    func toggleFullscreen() { isFullscreen.toggle() }
+}
+
+enum InspectorTab {
+    case video, audio, info, effects, transitions, color
+}
+
+enum BrowserTab {
+    case allMedia, video, audio, titles, generators, transitions, effects
 }

@@ -18,5 +18,7 @@
     <true/>
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.video</string>
+    <key>LSBackgroundOnly</key>
+    <false/>
 </dict>
 </plist>

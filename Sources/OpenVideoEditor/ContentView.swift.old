@@ -1,0 +1,2494 @@
+import SwiftUI
+import OpenVideoCore
+
+// MARK: - Main Window
+
+struct MainWindowView: View {
+    @EnvironmentObject var appState: AppState
+    
+    var body: some View {
+        GeometryReader { geometry in
+            VStack(spacing: 0) {
+                // Top Toolbar
+                TopToolbar()
+                    .frame(height: 44)
+                
+                // Main Workspace
+                HStack(spacing: 0) {
+                    // Left: Media Pool / Browser
+                    if appState.showBrowser {
+                        MediaPoolView()
+                            .frame(width: 320)
+                    }
+                    
+                    // Center: Viewer + Timeline
+                    VStack(spacing: 0) {
+                        // Viewer Section with Scopes
+                        if appState.showViewer {
+                            HStack(spacing: 0) {
+                                // Video Viewer
+                                VideoViewer()
+                                    .frame(minWidth: 600)
+                                
+                                // Scopes Panel
+                                if appState.showColorInspector {
+                                    ScopesPanel()
+                                        .frame(width: 240)
+                                }
+                            }
+                        }
+                        
+                        // Timeline Section
+                        if appState.showTimeline {
+                            TimelineView()
+                                .frame(height: geometry.size.height * 0.35)
+                        }
+                    }
+                    
+                    // Right: Inspector Panel
+                    if appState.showInspector {
+                        InspectorPanel()
+                            .frame(width: 300)
+                    }
+                }
+                .background(Color(hex: "1a1a1a"))
+                
+                // Bottom Transport Controls
+                TransportBar()
+                    .frame(height: 52)
+            }
+            .background(Color(hex: "0d0d0d"))
+        }
+        .sheet(isPresented: $appState.showNewProjectSheet) {
+            NewProjectSheet()
+        }
+        .sheet(isPresented: $appState.showExportSheet) {
+            ExportSheet()
+        }
+        .sheet(isPresented: $appState.showExportSettings) {
+            ExportSettingsSheet()
+        }
+    }
+}
+
+// MARK: - Top Toolbar
+
+struct TopToolbar: View {
+    @EnvironmentObject var appState: AppState
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            // Left: Project Info
+            HStack(spacing: 8) {
+                Image(systemName: "film")
+                    .font(.system(size: 18))
+                    .foregroundColor(Color(hex: "f5a623"))
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(appState.currentProject?.name ?? "Untitled Project")
+                        .font(.system(size: 13, weight: .semibold))
+                    
+                    HStack(spacing: 4) {
+                        if let project = appState.currentProject {
+                            Text("\(Int(project.resolution.width))×\(Int(project.resolution.height))")
+                                .font(.system(size: 10))
+                                .foregroundColor(.gray)
+                            
+                            Text("•")
+                                .font(.system(size: 10))
+                                .foregroundColor(.gray)
+                            
+                            Text("\(String(format: "%.2f", project.frameRate)) fps")
+                                .font(.system(size: 10))
+                                .foregroundColor(.gray)
+                        }
+                    }
+                }
+            }
+            
+            Spacer()
+            
+            // Center: Page Selector (DaVinci Resolve style)
+            HStack(spacing: 0) {
+                PageButton(title: "Media", icon: "film.stack", isActive: appState.browserTab == .allMedia) {
+                    appState.browserTab = .allMedia
+                }
+                
+                PageButton(title: "Cut", icon: "scissors", isActive: false) {
+                }
+                
+                PageButton(title: "Edit", icon: "timeline.selection", isActive: true) {
+                }
+                
+                PageButton(title: "Fusion", icon: "atom", isActive: false) {
+                }
+                
+                PageButton(title: "Color", icon: "paintpalette", isActive: appState.showColorInspector) {
+                    appState.showColorInspector.toggle()
+                }
+                
+                PageButton(title: "Fairlight", icon: "waveform", isActive: appState.showAudioMeters) {
+                    appState.showAudioMeters.toggle()
+                }
+                
+                PageButton(title: "Deliver", icon: "square.and.arrow.up", isActive: appState.showExportSheet) {
+                    appState.showExportSheet = true
+                }
+            }
+            .background(Color(hex: "262626"))
+            .cornerRadius(6)
+            
+            Spacer()
+            
+            // Right: Tools & Settings
+            HStack(spacing: 12) {
+                // Magnetic Snapping Toggle
+                ToolbarToggleButton(
+                    icon: "magnet",
+                    isActive: appState.magneticSnapping,
+                    tooltip: "Magnetic Snapping (N)"
+                ) {
+                    appState.magneticSnapping.toggle()
+                }
+                
+                // Audio Waveforms Toggle
+                ToolbarToggleButton(
+                    icon: "waveform",
+                    isActive: appState.showAudioWaveforms,
+                    tooltip: "Audio Waveforms"
+                ) {
+                    appState.showAudioWaveforms.toggle()
+                }
+                
+                // Video Thumbnails Toggle
+                ToolbarToggleButton(
+                    icon: "photo",
+                    isActive: appState.showVideoThumbnails,
+                    tooltip: "Video Thumbnails"
+                ) {
+                    appState.showVideoThumbnails.toggle()
+                }
+                
+                Divider()
+                    .frame(height: 24)
+                
+                Button(action: { appState.showExportSettings = true }) {
+                    Image(systemName: "gear")
+                        .font(.system(size: 16))
+                }
+                .buttonStyle(PlainButtonStyle())
+                .help("Project Settings")
+            }
+        }
+        .padding(.horizontal, 16)
+        .background(Color(hex: "1e1e1e"))
+        .overlay(
+            Rectangle()
+                .frame(height: 1)
+                .foregroundColor(Color.black.opacity(0.5)),
+            alignment: .bottom
+        )
+    }
+}
+
+struct PageButton: View {
+    let title: String
+    let icon: String
+    let isActive: Bool
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 2) {
+                Image(systemName: icon)
+                    .font(.system(size: 16))
+                Text(title)
+                    .font(.system(size: 9))
+            }
+            .frame(width: 64, height: 40)
+            .foregroundColor(isActive ? Color(hex: "f5a623") : Color.gray)
+            .background(isActive ? Color(hex: "1a1a1a") : Color.clear)
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+}
+
+struct ToolbarToggleButton: View {
+    let icon: String
+    let isActive: Bool
+    let tooltip: String
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 16))
+                .foregroundColor(isActive ? Color(hex: "f5a623") : Color.gray)
+                .frame(width: 32, height: 32)
+                .background(isActive ? Color(hex: "2a2a2a") : Color.clear)
+                .cornerRadius(4)
+        }
+        .buttonStyle(PlainButtonStyle())
+        .help(tooltip)
+    }
+}
+
+// MARK: - Media Pool (DaVinci Resolve Style)
+
+struct MediaPoolView: View {
+    @EnvironmentObject var appState: AppState
+    @State private var selectedTab = 0
+    @State private var searchText = ""
+    @State private var isListView = true
+    @State private var selectedBin: String? = "Master"
+    
+    let bins = ["Master", "Video", "Audio", "Graphics", "Archives"]
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // Header
+            HStack {
+                Text("Media Pool")
+                    .font(.system(size: 13, weight: .semibold))
+                
+                Spacer()
+                
+                Button(action: { isListView.toggle() }) {
+                    Image(systemName: isListView ? "list.bullet" : "square.grid.2x2")
+                        .font(.system(size: 12))
+                }
+                .buttonStyle(PlainButtonStyle())
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(Color(hex: "1e1e1e"))
+            
+            // Bins (Smart Bins - DaVinci Resolve style)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 4) {
+                    ForEach(bins, id: \.self) { bin in
+                        BinButton(
+                            title: bin,
+                            count: Int.random(in: 0...50),
+                            isSelected: selectedBin == bin
+                        ) {
+                            selectedBin = bin
+                        }
+                    }
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+            }
+            .frame(height: 44)
+            .background(Color(hex: "1a1a1a"))
+            
+            // Search Bar
+            HStack {
+                Image(systemName: "magnifyingglass")
+                    .foregroundColor(.gray)
+                    .font(.system(size: 12))
+                
+                TextField("Search media...", text: $searchText)
+                    .font(.system(size: 12))
+                    .textFieldStyle(PlainTextFieldStyle())
+                
+                if !searchText.isEmpty {
+                    Button(action: { searchText = "" }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(.gray)
+                            .font(.system(size: 12))
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                }
+            }
+            .padding(8)
+            .background(Color(hex: "262626"))
+            .cornerRadius(6)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            
+            // Media List
+            List {
+                Section(header: 
+                    HStack {
+                        Text("Clips")
+                            .font(.system(size: 11, weight: .semibold))
+                        Spacer()
+                        Text("50 items")
+                            .font(.system(size: 10))
+                            .foregroundColor(.gray)
+                    }
+                    .padding(.vertical, 4)
+                ) {
+                    ForEach(0..<10) { i in
+                        MediaItemRow(
+                            name: "Clip_\(String(format: "%03d", i + 1)).mov",
+                            duration: "00:00:\(String(format: "%02d", Int.random(in: 10...59))):00",
+                            resolution: "1920×1080",
+                            fps: "60",
+                            codec: "ProRes 422"
+                        )
+                    }
+                }
+            }
+            .listStyle(PlainListStyle())
+            
+            // Metadata Inspector (Bottom of Media Pool)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Clip Metadata")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(.gray)
+                
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        MetadataRow(label: "Duration", value: "00:01:23:15")
+                        MetadataRow(label: "Resolution", value: "1920×1080")
+                        MetadataRow(label: "Frame Rate", value: "60 fps")
+                    }
+                    
+                    Spacer()
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        MetadataRow(label: "Codec", value: "ProRes 422 HQ")
+                        MetadataRow(label: "Color Space", value: "Rec. 709")
+                        MetadataRow(label: "Audio", value: "2 ch, 48kHz")
+                    }
+                }
+            }
+            .padding(12)
+            .background(Color(hex: "1e1e1e"))
+            .frame(height: 100)
+        }
+        .background(Color(hex: "141414"))
+        .foregroundColor(.white)
+    }
+}
+
+struct BinButton: View {
+    let title: String
+    let count: Int
+    let isSelected: Bool
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Image(systemName: "folder.fill")
+                    .font(.system(size: 10))
+                    .foregroundColor(isSelected ? Color(hex: "f5a623") : Color.gray)
+                
+                Text(title)
+                    .font(.system(size: 11))
+                
+                Text("(\(count))")
+                    .font(.system(size: 10))
+                    .foregroundColor(.gray)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(isSelected ? Color(hex: "2a2a2a") : Color(hex: "1e1e1e"))
+            .cornerRadius(4)
+            .overlay(
+                RoundedRectangle(cornerRadius: 4)
+                    .stroke(isSelected ? Color(hex: "f5a623").opacity(0.5) : Color.clear, lineWidth: 1)
+            )
+        }
+        .buttonStyle(PlainButtonStyle())
+        .foregroundColor(isSelected ? .white : Color.gray.opacity(0.8))
+    }
+}
+
+struct MediaItemRow: View {
+    let name: String
+    let duration: String
+    let resolution: String
+    let fps: String
+    let codec: String
+    @State private var isHovered = false
+    @State private var isSelected = false
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            // Thumbnail
+            ZStack {
+                Rectangle()
+                    .fill(Color(hex: "2a2a2a"))
+                    .frame(width: 60, height: 36)
+                    .cornerRadius(2)
+                
+                Image(systemName: "film")
+                    .font(.system(size: 16))
+                    .foregroundColor(.gray)
+            }
+            
+            // Info
+            VStack(alignment: .leading, spacing: 2) {
+                Text(name)
+                    .font(.system(size: 12))
+                    .lineLimit(1)
+                
+                HStack(spacing: 8) {
+                    Text(duration)
+                        .font(.system(size: 10))
+                        .foregroundColor(.gray)
+                    
+                    Text(resolution)
+                        .font(.system(size: 10))
+                        .foregroundColor(.gray)
+                    
+                    Text(fps)
+                        .font(.system(size: 10))
+                        .foregroundColor(.gray)
+                    
+                    Text(codec)
+                        .font(.system(size: 10))
+                        .foregroundColor(Color(hex: "f5a623"))
+                }
+            }
+            
+            Spacer()
+            
+            // Selection indicator
+            if isSelected {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundColor(Color(hex: "f5a623"))
+                    .font(.system(size: 14))
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(isSelected ? Color(hex: "f5a623").opacity(0.2) : (isHovered ? Color(hex: "2a2a2a") : Color.clear))
+        .cornerRadius(4)
+        .onHover { hovering in
+            isHovered = hovering
+        }
+        .onTapGesture {
+            isSelected.toggle()
+        }
+    }
+}
+
+struct MetadataRow: View {
+    let label: String
+    let value: String
+    
+    var body: some View {
+        HStack {
+            Text(label)
+                .font(.system(size: 10))
+                .foregroundColor(.gray)
+                .frame(width: 60, alignment: .leading)
+            
+            Text(value)
+                .font(.system(size: 10))
+                .foregroundColor(.white)
+        }
+    }
+}
+
+// MARK: - Video Viewer with Professional Features
+
+struct VideoViewer: View {
+    @EnvironmentObject var appState: AppState
+    @State private var showOverlays = true
+    @State private var showSafeZones = true
+    @State private var showGrid = false
+    @State private var playbackQuality = 1.0
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // Viewer Toolbar
+            HStack {
+                // Left: Quality & Display
+                HStack(spacing: 8) {
+                    Menu("Full") {
+                        Button("Quarter") { playbackQuality = 0.25 }
+                        Button("Half") { playbackQuality = 0.5 }
+                        Button("Full") { playbackQuality = 1.0 }
+                    }
+                    .font(.system(size: 11))
+                    
+                    Text("•")
+                        .foregroundColor(.gray)
+                    
+                    Button(action: { showOverlays.toggle() }) {
+                        Image(systemName: showOverlays ? "eye" : "eye.slash")
+                            .font(.system(size: 12))
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    .help("Show/Hide Overlays")
+                }
+                
+                Spacer()
+                
+                // Center: Viewer Mode
+                Picker("", selection: .constant(0)) {
+                    Text("Source").tag(0)
+                    Text("Timeline").tag(1)
+                }
+                .pickerStyle(SegmentedPickerStyle())
+                .frame(width: 140)
+                
+                Spacer()
+                
+                // Right: Zoom
+                HStack(spacing: 8) {
+                    Button(action: { }) {
+                        Image(systemName: "minus.magnifyingglass")
+                            .font(.system(size: 12))
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    
+                    Text("Fit")
+                        .font(.system(size: 11))
+                    
+                    Button(action: { }) {
+                        Image(systemName: "plus.magnifyingglass")
+                            .font(.system(size: 12))
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(Color(hex: "1a1a1a"))
+            
+            // Video Canvas
+            GeometryReader { geometry in
+                ZStack {
+                    // Background
+                    Color.black
+                    
+                    // Video Placeholder
+                    Rectangle()
+                        .fill(Color(hex: "0d0d0d"))
+                        .aspectRatio(16/9, contentMode: .fit)
+                        .overlay(
+                            ZStack {
+                                // Placeholder content
+                                Image(systemName: "play.rectangle.fill")
+                                    .font(.system(size: 100))
+                                    .foregroundColor(Color(hex: "2a2a2a"))
+                                
+                                // Safe Zones
+                                if showSafeZones && showOverlays {
+                                    SafeZonesOverlay()
+                                }
+                                
+                                // Grid
+                                if showGrid && showOverlays {
+                                    GridOverlay()
+                                }
+                                
+                                // Center Crosshair
+                                if showOverlays {
+                                    CrosshairOverlay()
+                                }
+                                
+                                // Timecode Burn-in
+                                if showOverlays {
+                                    VStack {
+                                        Spacer()
+                                        HStack {
+                                            Spacer()
+                                            Text("00:01:23:15")
+                                                .font(.system(size: 16, weight: .medium, design: .monospaced))
+                                                .foregroundColor(.white)
+                                                .padding(8)
+                                                .background(Color.black.opacity(0.5))
+                                                .cornerRadius(4)
+                                                .padding(16)
+                                        }
+                                    }
+                                }
+                            }
+                        )
+                    
+                    // In/Out Points
+                    if showOverlays {
+                        InOutPointsOverlay()
+                    }
+                }
+            }
+            
+            // Bottom: Timecode & Transport Info
+            HStack {
+                // Time Display
+                HStack(spacing: 2) {
+                    TimeDigit(value: 0, label: "HR")
+                    Text(":")
+                        .foregroundColor(.gray)
+                    TimeDigit(value: 1, label: "MIN")
+                    Text(":")
+                        .foregroundColor(.gray)
+                    TimeDigit(value: 23, label: "SEC")
+                    Text(":")
+                        .foregroundColor(.gray)
+                    TimeDigit(value: 15, label: "FRM", highlight: true)
+                }
+                
+                Spacer()
+                
+                // Clip Info
+                HStack(spacing: 12) {
+                    Label("Clip_001", systemImage: "film")
+                        .font(.system(size: 11))
+                    
+                    Text("•")
+                        .foregroundColor(.gray)
+                    
+                    Text("00:00:00:00 - 00:01:23:15")
+                        .font(.system(size: 11))
+                        .foregroundColor(.gray)
+                }
+                
+                Spacer()
+                
+                // Duration
+                HStack(spacing: 2) {
+                    TimeDigit(value: 0, label: "HR")
+                    Text(":")
+                        .foregroundColor(.gray)
+                    TimeDigit(value: 1, label: "MIN")
+                    Text(":")
+                        .foregroundColor(.gray)
+                    TimeDigit(value: 23, label: "SEC")
+                    Text(":")
+                        .foregroundColor(.gray)
+                    TimeDigit(value: 15, label: "FRM", highlight: true)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(Color(hex: "1a1a1a"))
+        }
+        .background(Color(hex: "141414"))
+    }
+}
+
+struct TimeDigit: View {
+    let value: Int
+    let label: String
+    var highlight: Bool = false
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            Text(String(format: "%02d", value))
+                .font(.system(size: 20, weight: .semibold, design: .monospaced))
+                .foregroundColor(highlight ? Color(hex: "f5a623") : .white)
+            
+            Text(label)
+                .font(.system(size: 8))
+                .foregroundColor(.gray)
+        }
+    }
+}
+
+struct SafeZonesOverlay: View {
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                // Action Safe (90%)
+                Rectangle()
+                    .stroke(Color.yellow.opacity(0.3), lineWidth: 1)
+                    .frame(
+                        width: geometry.size.width * 0.9,
+                        height: geometry.size.height * 0.9
+                    )
+                
+                // Title Safe (80%)
+                Rectangle()
+                    .stroke(Color.yellow.opacity(0.3), lineWidth: 1)
+                    .frame(
+                        width: geometry.size.width * 0.8,
+                        height: geometry.size.height * 0.8
+                    )
+                
+                // Center cross
+                Rectangle()
+                    .fill(Color.yellow.opacity(0.5))
+                    .frame(width: 20, height: 1)
+                
+                Rectangle()
+                    .fill(Color.yellow.opacity(0.5))
+                    .frame(width: 1, height: 20)
+            }
+        }
+    }
+}
+
+struct GridOverlay: View {
+    var body: some View {
+        GeometryReader { geometry in
+            let w = geometry.size.width
+            let h = geometry.size.height
+            
+            ZStack {
+                // Rule of thirds
+                HStack(spacing: w / 3) {
+                    Rectangle().fill(Color.white.opacity(0.2)).frame(width: 1)
+                    Rectangle().fill(Color.white.opacity(0.2)).frame(width: 1)
+                }
+                
+                VStack(spacing: h / 3) {
+                    Rectangle().fill(Color.white.opacity(0.2)).frame(height: 1)
+                    Rectangle().fill(Color.white.opacity(0.2)).frame(height: 1)
+                }
+            }
+        }
+    }
+}
+
+struct CrosshairOverlay: View {
+    var body: some View {
+        ZStack {
+            Rectangle()
+                .fill(Color.red.opacity(0.8))
+                .frame(width: 16, height: 2)
+            
+            Rectangle()
+                .fill(Color.red.opacity(0.8))
+                .frame(width: 2, height: 16)
+        }
+    }
+}
+
+struct InOutPointsOverlay: View {
+    var body: some View {
+        GeometryReader { geometry in
+            HStack {
+                // In Point
+                VStack {
+                    Spacer()
+                    Rectangle()
+                        .fill(Color.green)
+                        .frame(width: 2, height: 40)
+                    Text("I")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.green)
+                        .padding(.bottom, 8)
+                }
+                
+                Spacer()
+                
+                // Out Point
+                VStack {
+                    Spacer()
+                    Rectangle()
+                        .fill(Color.red)
+                        .frame(width: 2, height: 40)
+                    Text("O")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.red)
+                        .padding(.bottom, 8)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Scopes Panel (DaVinci Resolve Style)
+
+struct ScopesPanel: View {
+    @State private var selectedScope = 0
+    let scopes = ["Waveform", "Vectorscope", "Histogram", " Parade", "RGB Parade"]
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // Scope Selector
+            Picker("", selection: $selectedScope) {
+                ForEach(0..<scopes.count, id: \.self) { index in
+                    Text(scopes[index]).tag(index)
+                }
+            }
+            .pickerStyle(SegmentedPickerStyle())
+            .padding(8)
+            
+            // Scope Display
+            TabView(selection: $selectedScope) {
+                WaveformScope()
+                    .tag(0)
+                
+                Vectorscope()
+                    .tag(1)
+                
+                HistogramScope()
+                    .tag(2)
+                
+                ParadeScope()
+                    .tag(3)
+                
+                RGBParadeScope()
+                    .tag(4)
+            }
+            .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
+            
+            // Scope Settings
+            HStack {
+                Button(action: { }) {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 12))
+                }
+                .buttonStyle(PlainButtonStyle())
+                
+                Spacer()
+                
+                Toggle("Low Pass", isOn: .constant(true))
+                    .font(.system(size: 10))
+            }
+            .padding(8)
+            .background(Color(hex: "1a1a1a"))
+        }
+        .background(Color(hex: "141414"))
+        .foregroundColor(.white)
+    }
+}
+
+struct WaveformScope: View {
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                // Background
+                Color.black
+                
+                // Grid
+                VStack(spacing: geometry.size.height / 4) {
+                    ForEach(0..<5) { _ in
+                        Rectangle()
+                            .fill(Color.gray.opacity(0.3))
+                            .frame(height: 1)
+                    }
+                }
+                
+                // Waveform simulation
+                HStack(spacing: 0) {
+                    ForEach(0..<50) { i in
+                        Rectangle()
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        Color.green.opacity(0.8),
+                                        Color.yellow.opacity(0.8),
+                                        Color.red.opacity(0.8)
+                                    ],
+                                    startPoint: .bottom,
+                                    endPoint: .top
+                                )
+                            )
+                            .frame(width: geometry.size.width / 50)
+                            .frame(height: CGFloat.random(in: 20...(geometry.size.height - 20)))
+                    }
+                }
+                .blendMode(.screen)
+            }
+        }
+    }
+}
+
+struct Vectorscope: View {
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                Color.black
+                
+                // Circle
+                Circle()
+                    .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                
+                Circle()
+                    .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                    .frame(width: geometry.size.width * 0.66)
+                
+                // Crosshair
+                Rectangle()
+                    .fill(Color.gray.opacity(0.3))
+                    .frame(width: geometry.size.width, height: 1)
+                
+                Rectangle()
+                    .fill(Color.gray.opacity(0.3))
+                    .frame(width: 1, height: geometry.size.height)
+                
+                // Color targets
+                ForEach(["R", "Mg", "B", "Cy", "G", "Yl"], id: \.self) { color in
+                    Text(color)
+                        .font(.system(size: 10))
+                        .foregroundColor(.gray)
+                        .offset(
+                            x: cos(angleForColor(color)) * geometry.size.width * 0.4,
+                            y: sin(angleForColor(color)) * geometry.size.height * 0.4
+                        )
+                }
+                
+                // Signal blob
+                Circle()
+                    .fill(Color.green.opacity(0.6))
+                    .frame(width: 80, height: 60)
+                    .offset(x: 20, y: -10)
+                    .blur(radius: 8)
+            }
+        }
+    }
+    
+    func angleForColor(_ color: String) -> Double {
+        let angles = ["R": 0.0, "Yl": 60.0, "G": 120.0, "Cy": 180.0, "B": 240.0, "Mg": 300.0]
+        return (angles[color] ?? 0) * .pi / 180
+    }
+}
+
+struct HistogramScope: View {
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                Color.black
+                
+                HStack(alignment: .bottom, spacing: 1) {
+                    ForEach(0..<100) { i in
+                        let height = CGFloat.random(in: 5...(geometry.size.height - 10))
+                        Rectangle()
+                            .fill(
+                                i < 10 ? Color.black :
+                                i < 20 ? Color.blue :
+                                i < 50 ? Color.green :
+                                i < 80 ? Color.yellow :
+                                Color.red
+                            )
+                            .frame(width: (geometry.size.width - 99) / 100, height: height)
+                    }
+                }
+            }
+        }
+    }
+}
+
+struct ParadeScope: View {
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                Color.black
+                
+                // RGB channels
+                HStack(spacing: 4) {
+                    ChannelWaveform(color: .red, geometry: geometry)
+                    ChannelWaveform(color: .green, geometry: geometry)
+                    ChannelWaveform(color: .blue, geometry: geometry)
+                }
+            }
+        }
+    }
+}
+
+struct RGBParadeScope: View {
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                Color.black
+                
+                // Overlapping RGB
+                ChannelWaveform(color: .red, geometry: geometry)
+                    .opacity(0.5)
+                    .blendMode(.screen)
+                
+                ChannelWaveform(color: .green, geometry: geometry)
+                    .opacity(0.5)
+                    .blendMode(.screen)
+                
+                ChannelWaveform(color: .blue, geometry: geometry)
+                    .opacity(0.5)
+                    .blendMode(.screen)
+            }
+        }
+    }
+}
+
+struct ChannelWaveform: View {
+    let color: Color
+    let geometry: GeometryProxy
+    
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(0..<30) { _ in
+                Rectangle()
+                    .fill(color)
+                    .frame(width: geometry.size.width / 30)
+                    .frame(height: CGFloat.random(in: 10...(geometry.size.height - 10)))
+            }
+        }
+    }
+}
+
+// MARK: - Timeline View (DaVinci Resolve Style)
+
+struct TimelineView: View {
+    @EnvironmentObject var appState: AppState
+    @State private var zoom: Double = 1.0
+    @State private var scrollOffset: CGFloat = 0
+    @State private var playheadPosition: CGFloat = 200
+    @State private var selectedTool = Tool.select
+    
+    enum Tool: String, CaseIterable {
+        case select = "A"
+        case trim = "T"
+        case blade = "B"
+        case razor = "R"
+        case slip = "Y"
+        case slide = "U"
+        case roll = "N"
+    }
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // Timeline Toolbar
+            TimelineToolbar(selectedTool: $selectedTool, zoom: $zoom)
+                .frame(height: 44)
+            
+            // Timeline Tracks
+            HStack(spacing: 0) {
+                // Track Headers
+                TrackHeaders()
+                    .frame(width: 100)
+                
+                // Timeline Canvas
+                ScrollView(.horizontal, showsIndicators: true) {
+                    ZStack {
+                        // Background
+                        Color(hex: "0d0d0d")
+                        
+                        // Ruler
+                        TimelineRuler()
+                            .frame(height: 24)
+                            .position(x: 1500, y: 12)
+                        
+                        // Video Tracks
+                        VStack(spacing: 0) {
+                            ForEach(0..<4) { i in
+                                VideoTrackRow(trackNumber: i + 1)
+                                    .frame(height: 58)
+                            }
+                        }
+                        .position(x: 1500, y: 140)
+                        
+                        // Audio Tracks
+                        VStack(spacing: 0) {
+                            ForEach(0..<4) { i in
+                                AudioTrackRow(trackNumber: i + 1)
+                                    .frame(height: 48)
+                            }
+                        }
+                        .position(x: 1500, y: 340)
+                        
+                        // Playhead
+                        Playhead(position: playheadPosition)
+                    }
+                    .frame(width: 3000, height: 400)
+                }
+                .background(Color(hex: "0d0d0d"))
+            }
+            
+            // Audio Meters (if enabled)
+            if appState.showAudioMeters {
+                AudioMetersView()
+                    .frame(height: 60)
+            }
+        }
+        .background(Color(hex: "141414"))
+    }
+}
+
+struct TimelineToolbar: View {
+    @Binding var selectedTool: TimelineView.Tool
+    @Binding var zoom: Double
+    @EnvironmentObject var appState: AppState
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            // Tools
+            HStack(spacing: 4) {
+                ForEach(TimelineView.Tool.allCases, id: \.self) { tool in
+                    ToolButton(
+                        tool: tool,
+                        isSelected: selectedTool == tool
+                    ) {
+                        selectedTool = tool
+                    }
+                }
+            }
+            
+            Divider()
+                .frame(height: 24)
+            
+            // Edit buttons
+            HStack(spacing: 8) {
+                ToolbarButton(icon: "arrow.uturn.backward", tooltip: "Undo (⌘Z)") { }
+                ToolbarButton(icon: "arrow.uturn.forward", tooltip: "Redo (⌘⇧Z)") { }
+                
+                Divider()
+                    .frame(height: 24)
+                
+                ToolbarButton(icon: "scissors", tooltip: "Split (⌘B)") { }
+                ToolbarButton(icon: "link", tooltip: "Join (⌘J)") { }
+            }
+            
+            Spacer()
+            
+            // Time Display
+            HStack(spacing: 2) {
+                Text("01")
+                    .font(.system(size: 18, weight: .medium, design: .monospaced))
+                Text(":")
+                    .foregroundColor(.gray)
+                Text("23")
+                    .font(.system(size: 18, weight: .medium, design: .monospaced))
+                Text(":")
+                    .foregroundColor(.gray)
+                Text("45")
+                    .font(.system(size: 18, weight: .medium, design: .monospaced))
+                    .foregroundColor(Color(hex: "f5a623"))
+                Text(":")
+                    .foregroundColor(.gray)
+                Text("12")
+                    .font(.system(size: 14, design: .monospaced))
+                    .foregroundColor(.gray)
+            }
+            
+            Spacer()
+            
+            // View options
+            HStack(spacing: 8) {
+                // Zoom slider
+                HStack(spacing: 4) {
+                    Image(systemName: "minus.magnifyingglass")
+                        .font(.system(size: 10))
+                    
+                    Slider(value: $zoom, in: 0.1...5.0)
+                        .frame(width: 100)
+                    
+                    Image(systemName: "plus.magnifyingglass")
+                        .font(.system(size: 10))
+                }
+                
+                Divider()
+                    .frame(height: 24)
+                
+                Button(action: { appState.showAudioMeters.toggle() }) {
+                    Image(systemName: "waveform")
+                        .font(.system(size: 12))
+                }
+                .buttonStyle(PlainButtonStyle())
+                .foregroundColor(appState.showAudioMeters ? Color(hex: "f5a623") : .gray)
+            }
+        }
+        .padding(.horizontal, 12)
+        .background(Color(hex: "1a1a1a"))
+        .foregroundColor(.white)
+    }
+}
+
+struct ToolButton: View {
+    let tool: TimelineView.Tool
+    let isSelected: Bool
+    let action: () -> Void
+    
+    var icon: String {
+        switch tool {
+        case .select: return "arrow.left.arrow.right"
+        case .trim: return "arrow.up.left.and.arrow.down.right"
+        case .blade: return "scissors"
+        case .razor: return "xmark"
+        case .slip: return "arrow.left.and.right"
+        case .slide: return "arrow.left.and.right.square"
+        case .roll: return "arrow.left.arrow.right.circle"
+        }
+    }
+    
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 2) {
+                Image(systemName: icon)
+                    .font(.system(size: 14))
+                Text(tool.rawValue)
+                    .font(.system(size: 9))
+            }
+            .frame(width: 36, height: 36)
+            .background(isSelected ? Color(hex: "f5a623") : Color.clear)
+            .foregroundColor(isSelected ? .black : .gray)
+            .cornerRadius(4)
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+}
+
+struct ToolbarButton: View {
+    let icon: String
+    let tooltip: String
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 14))
+                .frame(width: 28, height: 28)
+                .foregroundColor(.gray)
+        }
+        .buttonStyle(PlainButtonStyle())
+        .help(tooltip)
+    }
+}
+
+struct TrackHeaders: View {
+    var body: some View {
+        VStack(spacing: 0) {
+            // Video tracks header
+            Text("VIDEO")
+                .font(.system(size: 9, weight: .bold))
+                .foregroundColor(.gray)
+                .frame(height: 20)
+                .frame(maxWidth: .infinity)
+                .background(Color(hex: "1a1a1a"))
+            
+            ForEach(0..<4) { i in
+                TrackHeader(
+                    label: "V\(i + 1)",
+                    icon: "eye.fill",
+                    color: .white
+                )
+                .frame(height: 58)
+            }
+            
+            // Audio tracks header
+            Text("AUDIO")
+                .font(.system(size: 9, weight: .bold))
+                .foregroundColor(.gray)
+                .frame(height: 20)
+                .frame(maxWidth: .infinity)
+                .background(Color(hex: "1a1a1a"))
+            
+            ForEach(0..<4) { i in
+                TrackHeader(
+                    label: "A\(i + 1)",
+                    icon: "speaker.wave.2.fill",
+                    color: Color(hex: "4a90d9")
+                )
+                .frame(height: 48)
+            }
+        }
+        .background(Color(hex: "141414"))
+    }
+}
+
+struct TrackHeader: View {
+    let label: String
+    let icon: String
+    let color: Color
+    @State private var isEnabled = true
+    
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(label)
+                .font(.system(size: 11, weight: .bold))
+                .frame(width: 24)
+            
+            Button(action: { isEnabled.toggle() }) {
+                Image(systemName: icon)
+                    .font(.system(size: 10))
+                    .foregroundColor(isEnabled ? color : .gray)
+            }
+            .buttonStyle(PlainButtonStyle())
+            
+            Spacer()
+            
+            Button(action: { }) {
+                Image(systemName: "lock.open")
+                    .font(.system(size: 10))
+                    .foregroundColor(.gray)
+            }
+            .buttonStyle(PlainButtonStyle())
+        }
+        .padding(.horizontal, 8)
+        .background(Color(hex: "1e1e1e"))
+        .border(Color.black.opacity(0.5), width: 0.5)
+    }
+}
+
+struct TimelineRuler: View {
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(0..<120) { second in
+                VStack(spacing: 2) {
+                    Rectangle()
+                        .fill(Color.gray.opacity(second % 5 == 0 ? 0.5 : 0.2))
+                        .frame(width: 1, height: second % 5 == 0 ? 12 : 6)
+                    
+                    if second % 5 == 0 {
+                        Text("\(second)")
+                            .font(.system(size: 9))
+                            .foregroundColor(.gray)
+                    }
+                }
+                .frame(width: 25)
+            }
+        }
+    }
+}
+
+struct VideoTrackRow: View {
+    let trackNumber: Int
+    
+    var body: some View {
+        ZStack {
+            // Track background
+            Rectangle()
+                .fill(trackNumber % 2 == 0 ? Color(hex: "1a1a1a") : Color(hex: "1e1e1e"))
+            
+            // Clips
+            HStack(spacing: 0) {
+                if trackNumber == 1 {
+                    TimelineClip(name: "Scene_001", duration: 150, color: Color(hex: "5c8a4a"))
+                        .offset(x: 100)
+                    
+                    TimelineClip(name: "Scene_002", duration: 200, color: Color(hex: "5c8a4a"))
+                        .offset(x: 260)
+                } else if trackNumber == 2 {
+                    TimelineClip(name: "B-Roll_01", duration: 100, color: Color(hex: "8a5c4a"))
+                        .offset(x: 300)
+                }
+            }
+        }
+    }
+}
+
+struct AudioTrackRow: View {
+    let trackNumber: Int
+    
+    var body: some View {
+        ZStack {
+            // Track background
+            Rectangle()
+                .fill(trackNumber % 2 == 0 ? Color(hex: "1a1a1a") : Color(hex: "1e1e1e"))
+            
+            // Waveform visualization
+            if trackNumber == 1 {
+                AudioWaveform()
+                    .padding(.horizontal, 100)
+            }
+        }
+    }
+}
+
+struct TimelineClip: View {
+    let name: String
+    let duration: CGFloat
+    let color: Color
+    @State private var isSelected = false
+    
+    var body: some View {
+        ZStack(alignment: .leading) {
+            // Clip body
+            RoundedRectangle(cornerRadius: 3)
+                .fill(color)
+                .frame(width: duration, height: 52)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 3)
+                        .stroke(isSelected ? Color.white : Color.clear, lineWidth: 2)
+                )
+            
+            // Thumbnail strip
+            HStack(spacing: 2) {
+                ForEach(0..<Int(duration / 30)) { _ in
+                    Rectangle()
+                        .fill(Color.white.opacity(0.2))
+                        .frame(width: 28, height: 36)
+                        .cornerRadius(1)
+                }
+            }
+            .padding(.horizontal, 4)
+            .padding(.top, 2)
+            
+            // Label
+            VStack {
+                Spacer()
+                Text(name)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.black.opacity(0.5))
+                    .cornerRadius(2)
+                    .padding(.bottom, 4)
+                    .padding(.leading, 4)
+                Spacer()
+            }
+            
+            // Transition indicators
+            HStack {
+                // Left transition
+                Triangle()
+                    .fill(Color.white.opacity(0.8))
+                    .frame(width: 12, height: 12)
+                    .rotationEffect(.degrees(-90))
+                
+                Spacer()
+                
+                // Right transition
+                Triangle()
+                    .fill(Color.white.opacity(0.8))
+                    .frame(width: 12, height: 12)
+                    .rotationEffect(.degrees(90))
+            }
+            .padding(.horizontal, 2)
+        }
+        .onTapGesture {
+            isSelected.toggle()
+        }
+    }
+}
+
+struct AudioWaveform: View {
+    var body: some View {
+        GeometryReader { geometry in
+            HStack(spacing: 1) {
+                ForEach(0..<200) { _ in
+                    let height = CGFloat.random(in: 5...(geometry.size.height - 5))
+                    Rectangle()
+                        .fill(Color(hex: "4a90d9"))
+                        .frame(width: 3, height: height)
+                }
+            }
+        }
+    }
+}
+
+struct Playhead: View {
+    let position: CGFloat
+    
+    var body: some View {
+        ZStack {
+            // Line
+            Rectangle()
+                .fill(Color(hex: "f5a623"))
+                .frame(width: 2)
+                .frame(maxHeight: .infinity)
+            
+            // Triangle marker
+            Triangle()
+                .fill(Color(hex: "f5a623"))
+                .frame(width: 16, height: 10)
+                .position(x: 1, y: 10)
+        }
+        .position(x: position)
+    }
+}
+
+struct AudioMetersView: View {
+    @State private var levels: [CGFloat] = Array(repeating: 0.5, count: 20)
+    
+    var body: some View {
+        HStack(spacing: 16) {
+            ForEach(0..<4) { track in
+                VStack(spacing: 4) {
+                    HStack(spacing: 2) {
+                        // Left channel
+                        AudioMeterBar(levels: levels, track: track)
+                        
+                        // Right channel
+                        AudioMeterBar(levels: levels, track: track)
+                    }
+                    
+                    Text("A\(track + 1)")
+                        .font(.system(size: 9))
+                        .foregroundColor(.gray)
+                }
+            }
+            
+            Spacer()
+            
+            // Master meters
+            VStack(spacing: 4) {
+                HStack(spacing: 2) {
+                    AudioMeterBar(levels: levels, track: 99)
+                    AudioMeterBar(levels: levels, track: 99)
+                }
+                
+                Text("MASTER")
+                    .font(.system(size: 9))
+                    .foregroundColor(Color(hex: "f5a623"))
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Color(hex: "1a1a1a"))
+    }
+}
+
+struct AudioMeterBar: View {
+    let levels: [CGFloat]
+    let track: Int
+    
+    var body: some View {
+        VStack(spacing: 1) {
+            ForEach((0..<20).reversed(), id: \.self) { i in
+                let level = CGFloat.random(in: 0...1)
+                Rectangle()
+                    .fill(colorForLevel(level, index: i))
+                    .frame(width: 12, height: 2)
+            }
+        }
+        .frame(width: 12)
+    }
+    
+    func colorForLevel(_ level: CGFloat, index: Int) -> Color {
+        if index < 2 {
+            return level > 0.9 ? Color.red : Color(hex: "2a2a2a")
+        } else if index < 6 {
+            return level > 0.7 ? Color(hex: "f5a623") : Color(hex: "2a2a2a")
+        } else {
+            return level > 0.3 ? Color(hex: "4a9a4a") : Color(hex: "2a2a2a")
+        }
+    }
+}
+
+// MARK: - Inspector Panel
+
+struct InspectorPanel: View {
+    @EnvironmentObject var appState: AppState
+    @State private var selectedTab = 0
+    
+    let tabs = ["Video", "Audio", "Info", "Effects", "Color", "Metadata"]
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // Tab Bar
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 0) {
+                    ForEach(0..<tabs.count, id: \.self) { index in
+                        InspectorTabButton(
+                            title: tabs[index],
+                            isSelected: selectedTab == index
+                        ) {
+                            selectedTab = index
+                        }
+                    }
+                }
+            }
+            .frame(height: 36)
+            .background(Color(hex: "1e1e1e"))
+            
+            // Inspector Content
+            TabView(selection: $selectedTab) {
+                VideoInspector()
+                    .tag(0)
+                
+                AudioInspector()
+                    .tag(1)
+                
+                InfoInspector()
+                    .tag(2)
+                
+                EffectsInspector()
+                    .tag(3)
+                
+                ColorInspector()
+                    .tag(4)
+                
+                MetadataInspector()
+                    .tag(5)
+            }
+            .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
+        }
+        .background(Color(hex: "141414"))
+        .foregroundColor(.white)
+    }
+}
+
+struct InspectorTabButton: View {
+    let title: String
+    let isSelected: Bool
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 11, weight: isSelected ? .semibold : .regular))
+                .foregroundColor(isSelected ? .white : .gray)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(isSelected ? Color(hex: "2a2a2a") : Color.clear)
+                .border(Color(hex: "f5a623"), width: isSelected ? 2 : 0)
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+}
+
+struct VideoInspector: View {
+    @State private var positionX: Double = 0
+    @State private var positionY: Double = 0
+    @State private var scale: Double = 100
+    @State private var rotation: Double = 0
+    @State private var opacity: Double = 100
+    
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                // Transform Section
+                InspectorSection(title: "Transform") {
+                    VStack(spacing: 12) {
+                        InspectorSliderRow(label: "Position X", value: $positionX, range: -2000...2000, unit: "px")
+                        InspectorSliderRow(label: "Position Y", value: $positionY, range: -2000...2000, unit: "px")
+                        InspectorSliderRow(label: "Scale", value: $scale, range: 0...500, unit: "%")
+                        InspectorSliderRow(label: "Rotation", value: $rotation, range: -180...180, unit: "°")
+                        InspectorSliderRow(label: "Opacity", value: $opacity, range: 0...100, unit: "%")
+                    }
+                }
+                
+                // Crop Section
+                InspectorSection(title: "Crop") {
+                    VStack(spacing: 12) {
+                        InspectorSliderRow(label: "Left", value: .constant(0), range: 0...100, unit: "%")
+                        InspectorSliderRow(label: "Right", value: .constant(0), range: 0...100, unit: "%")
+                        InspectorSliderRow(label: "Top", value: .constant(0), range: 0...100, unit: "%")
+                        InspectorSliderRow(label: "Bottom", value: .constant(0), range: 0...100, unit: "%")
+                    }
+                }
+                
+                // Speed Section
+                InspectorSection(title: "Retime & Speed") {
+                    HStack {
+                        Text("Speed")
+                            .font(.system(size: 12))
+                        Spacer()
+                        Text("100%")
+                            .font(.system(size: 12, design: .monospaced))
+                            .foregroundColor(Color(hex: "f5a623"))
+                    }
+                    
+                    HStack {
+                        Button("Reset") { }
+                            .font(.system(size: 11))
+                        
+                        Spacer()
+                        
+                        Button("Retime Curve...") { }
+                            .font(.system(size: 11))
+                    }
+                }
+                
+                Spacer()
+            }
+            .padding()
+        }
+    }
+}
+
+struct AudioInspector: View {
+    @State private var volume: Double = 0
+    @State private var pan: Double = 0
+    
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                InspectorSection(title: "Volume & Pan") {
+                    VStack(spacing: 12) {
+                        InspectorSliderRow(label: "Volume", value: $volume, range: -60...12, unit: "dB")
+                        InspectorSliderRow(label: "Pan", value: $pan, range: -100...100, unit: "")
+                    }
+                }
+                
+                InspectorSection(title: "Equalizer") {
+                    // EQ Curve visualization
+                    EQCurve()
+                        .frame(height: 100)
+                }
+                
+                InspectorSection(title: "Dynamics") {
+                    Toggle("Compressor", isOn: .constant(false))
+                        .font(.system(size: 12))
+                    Toggle("Limiter", isOn: .constant(false))
+                        .font(.system(size: 12))
+                    Toggle("Noise Reduction", isOn: .constant(false))
+                        .font(.system(size: 12))
+                }
+                
+                Spacer()
+            }
+            .padding()
+        }
+    }
+}
+
+struct EQCurve: View {
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                // Background grid
+                VStack(spacing: geometry.size.height / 4) {
+                    ForEach(0..<5) { _ in
+                        Rectangle()
+                            .fill(Color.gray.opacity(0.2))
+                            .frame(height: 1)
+                    }
+                }
+                
+                HStack(spacing: geometry.size.width / 6) {
+                    ForEach(0..<7) { _ in
+                        Rectangle()
+                            .fill(Color.gray.opacity(0.2))
+                            .frame(width: 1)
+                    }
+                }
+                
+                // EQ curve
+                Path { path in
+                    let width = geometry.size.width
+                    let height = geometry.size.height
+                    
+                    path.move(to: CGPoint(x: 0, y: height * 0.7))
+                    path.addCurve(
+                        to: CGPoint(x: width * 0.3, y: height * 0.5),
+                        control1: CGPoint(x: width * 0.1, y: height * 0.7),
+                        control2: CGPoint(x: width * 0.2, y: height * 0.5)
+                    )
+                    path.addCurve(
+                        to: CGPoint(x: width * 0.7, y: height * 0.3),
+                        control1: CGPoint(x: width * 0.5, y: height * 0.3),
+                        control2: CGPoint(x: width * 0.6, y: height * 0.1)
+                    )
+                    path.addCurve(
+                        to: CGPoint(x: width, y: height * 0.6),
+                        control1: CGPoint(x: width * 0.8, y: height * 0.5),
+                        control2: CGPoint(x: width * 0.9, y: height * 0.6)
+                    )
+                }
+                .stroke(Color(hex: "f5a623"), lineWidth: 2)
+                
+                // Frequency labels
+                HStack {
+                    Text("30Hz")
+                    Spacer()
+                    Text("100Hz")
+                    Spacer()
+                    Text("1kHz")
+                    Spacer()
+                    Text("10kHz")
+                    Spacer()
+                    Text("20kHz")
+                }
+                .font(.system(size: 8))
+                .foregroundColor(.gray)
+                .position(x: geometry.size.width / 2, y: geometry.size.height - 8)
+            }
+        }
+    }
+}
+
+struct InfoInspector: View {
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                InspectorSection(title: "File Information") {
+                    InfoRow(label: "File Name", value: "Scene_001.mov")
+                    InfoRow(label: "Duration", value: "00:01:23:15")
+                    InfoRow(label: "Frame Rate", value: "60 fps")
+                    InfoRow(label: "Resolution", value: "1920 × 1080")
+                    InfoRow(label: "Codec", value: "Apple ProRes 422 HQ")
+                    InfoRow(label: "Color Space", value: "Rec. 709")
+                    InfoRow(label: "Audio", value: "2 channels, 48kHz")
+                }
+                
+                InspectorSection(title: "Timecode") {
+                    InfoRow(label: "Source Timecode", value: "01:00:00:00")
+                    InfoRow(label: "Timeline Timecode", value: "00:00:00:00")
+                    InfoRow(label: "Duration", value: "00:01:23:15")
+                }
+                
+                Spacer()
+            }
+            .padding()
+        }
+    }
+}
+
+struct InfoRow: View {
+    let label: String
+    let value: String
+    
+    var body: some View {
+        HStack {
+            Text(label)
+                .font(.system(size: 11))
+                .foregroundColor(.gray)
+            Spacer()
+            Text(value)
+                .font(.system(size: 11))
+                .foregroundColor(.white)
+        }
+    }
+}
+
+struct EffectsInspector: View {
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                // Add Effect Button
+                Button(action: { }) {
+                    HStack {
+                        Image(systemName: "plus.circle.fill")
+                        Text("Add Effect")
+                    }
+                    .font(.system(size: 13))
+                }
+                .buttonStyle(PlainButtonStyle())
+                .foregroundColor(Color(hex: "f5a623"))
+                
+                // Effects List
+                InspectorSection(title: "Applied Effects") {
+                    EffectRow(name: "Color Balance", isEnabled: true)
+                    EffectRow(name: "Blur - Gaussian", isEnabled: false)
+                    EffectRow(name: "Transform - Position", isEnabled: true)
+                    EffectRow(name: "LUT - Teal & Orange", isEnabled: true)
+                }
+                
+                Spacer()
+            }
+            .padding()
+        }
+    }
+}
+
+struct EffectRow: View {
+    let name: String
+    @State var isEnabled: Bool
+    
+    var body: some View {
+        HStack {
+            Toggle("", isOn: $isEnabled)
+                .toggleStyle(SwitchToggleStyle(tint: Color(hex: "f5a623")))
+                .scaleEffect(0.8)
+            
+            Text(name)
+                .font(.system(size: 12))
+            
+            Spacer()
+            
+            Button(action: { }) {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 12))
+            }
+            .buttonStyle(PlainButtonStyle())
+            
+            Button(action: { }) {
+                Image(systemName: "trash")
+                    .font(.system(size: 12))
+            }
+            .buttonStyle(PlainButtonStyle())
+        }
+        .foregroundColor(.gray)
+    }
+}
+
+struct ColorInspector: View {
+    @State private var liftY: Double = 0
+    @State private var gammaY: Double = 0
+    @State private var gainY: Double = 0
+    @State private var offsetY: Double = 0
+    
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Color Wheels & Curves")
+                    .font(.system(size: 14, weight: .semibold))
+                
+                // Color Wheels placeholder
+                HStack(spacing: 12) {
+                    ColorWheel(title: "Lift")
+                    ColorWheel(title: "Gamma")
+                    ColorWheel(title: "Gain")
+                }
+                .frame(height: 80)
+                
+                InspectorSection(title: "Primary Wheels") {
+                    VStack(spacing: 12) {
+                        InspectorSliderRow(label: "Lift Y", value: $liftY, range: -1...1, unit: "")
+                        InspectorSliderRow(label: "Gamma Y", value: $gammaY, range: -1...1, unit: "")
+                        InspectorSliderRow(label: "Gain Y", value: $gainY, range: -1...1, unit: "")
+                        InspectorSliderRow(label: "Offset Y", value: $offsetY, range: -1...1, unit: "")
+                    }
+                }
+                
+                InspectorSection(title: "Curves") {
+                    Button("Custom Curves...") { }
+                        .font(.system(size: 11))
+                }
+                
+                Spacer()
+            }
+            .padding()
+        }
+    }
+}
+
+struct ColorWheel: View {
+    let title: String
+    
+    var body: some View {
+        VStack(spacing: 4) {
+            Circle()
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            Color.red,
+                            Color.yellow,
+                            Color.green,
+                            Color.cyan,
+                            Color.blue,
+                            Color.magenta,
+                            Color.red
+                        ],
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: 35
+                    )
+                )
+                .frame(width: 70, height: 70)
+                .overlay(
+                    Circle()
+                        .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                )
+            
+            Text(title)
+                .font(.system(size: 10))
+                .foregroundColor(.gray)
+        }
+    }
+}
+
+struct MetadataInspector: View {
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                InspectorSection(title: "Camera Metadata") {
+                    InfoRow(label: "Camera", value: "Sony FX6")
+                    InfoRow(label: "Lens", value: "Sony FE 24-70mm GM")
+                    InfoRow(label: "ISO", value: "800")
+                    InfoRow(label: "Aperture", value: "f/2.8")
+                    InfoRow(label: "Shutter", value: "1/120s")
+                    InfoRow(label: "White Balance", value: "5600K")
+                }
+                
+                InspectorSection(title: "Production Metadata") {
+                    InfoRow(label: "Scene", value: "Scene 1")
+                    InfoRow(label: "Take", value: "Take 3")
+                    InfoRow(label: "Reel", value: "A001")
+                }
+                
+                Spacer()
+            }
+            .padding()
+        }
+    }
+}
+
+struct InspectorSection<Content: View>: View {
+    let title: String
+    let content: Content
+    @State private var isExpanded = true
+    
+    init(title: String, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.content = content()
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Button(action: { isExpanded.toggle() }) {
+                HStack {
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 10))
+                        .foregroundColor(.gray)
+                    
+                    Text(title)
+                        .font(.system(size: 12, weight: .semibold))
+                    
+                    Spacer()
+                }
+            }
+            .buttonStyle(PlainButtonStyle())
+            .foregroundColor(.white)
+            
+            if isExpanded {
+                content
+                    .padding(.leading, 12)
+            }
+        }
+        .padding(8)
+        .background(Color(hex: "1e1e1e"))
+        .cornerRadius(4)
+    }
+}
+
+struct InspectorSliderRow: View {
+    let label: String
+    @Binding var value: Double
+    let range: ClosedRange<Double>
+    let unit: String
+    
+    var body: some View {
+        VStack(spacing: 4) {
+            HStack {
+                Text(label)
+                    .font(.system(size: 11))
+                    .foregroundColor(.gray)
+                    .frame(width: 70, alignment: .leading)
+                
+                Slider(value: $value, in: range)
+                
+                Text("\(Int(value))\(unit)")
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundColor(Color(hex: "f5a623"))
+                    .frame(width: 50, alignment: .trailing)
+            }
+        }
+    }
+}
+
+// MARK: - Transport Bar (Bottom)
+
+struct TransportBar: View {
+    @EnvironmentObject var appState: AppState
+    
+    var body: some View {
+        HStack(spacing: 16) {
+            // Playback Controls
+            HStack(spacing: 12) {
+                Button(action: { }) {
+                    Image(systemName: "backward.frame.fill")
+                        .font(.system(size: 18))
+                }
+                .buttonStyle(PlainButtonStyle())
+                
+                Button(action: { appState.isPlaying.toggle() }) {
+                    Image(systemName: appState.isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                        .font(.system(size: 32))
+                }
+                .buttonStyle(PlainButtonStyle())
+                
+                Button(action: { }) {
+                    Image(systemName: "forward.frame.fill")
+                        .font(.system(size: 18))
+                }
+                .buttonStyle(PlainButtonStyle())
+                
+                Divider()
+                    .frame(height: 24)
+                
+                Button(action: { }) {
+                    Image(systemName: "backward.end.fill")
+                        .font(.system(size: 14))
+                }
+                .buttonStyle(PlainButtonStyle())
+                
+                Button(action: { }) {
+                    Image(systemName: "forward.end.fill")
+                        .font(.system(size: 14))
+                }
+                .buttonStyle(PlainButtonStyle())
+            }
+            
+            Spacer()
+            
+            // Jog/Shuttle
+            HStack(spacing: 4) {
+                Text("JOG")
+                    .font(.system(size: 9))
+                    .foregroundColor(Color(hex: "f5a623"))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 2)
+                    .background(Color(hex: "f5a623").opacity(0.2))
+                    .cornerRadius(2)
+                
+                Rectangle()
+                    .fill(Color(hex: "2a2a2a"))
+                    .frame(width: 120, height: 28)
+                    .overlay(
+                        HStack {
+                            Rectangle()
+                                .fill(Color(hex: "f5a623"))
+                                .frame(width: 2, height: 16)
+                                .position(x: 60, y: 14)
+                        }
+                    )
+                    .cornerRadius(4)
+            }
+            
+            Spacer()
+            
+            // Time Display
+            HStack(spacing: 2) {
+                TimeDigit(value: 0, label: "HR")
+                Text(":")
+                    .foregroundColor(.gray)
+                TimeDigit(value: 1, label: "MIN")
+                Text(":")
+                    .foregroundColor(.gray)
+                TimeDigit(value: 23, label: "SEC", highlight: true)
+                Text(":")
+                    .foregroundColor(.gray)
+                TimeDigit(value: 15, label: "FRM")
+            }
+            
+            Spacer()
+            
+            // Right: Additional Controls
+            HStack(spacing: 12) {
+                // Loop
+                Button(action: { }) {
+                    Image(systemName: "repeat")
+                        .font(.system(size: 14))
+                }
+                .buttonStyle(PlainButtonStyle())
+                
+                // Record
+                Button(action: { }) {
+                    Circle()
+                        .fill(Color.red)
+                        .frame(width: 14, height: 14)
+                }
+                .buttonStyle(PlainButtonStyle())
+                
+                Divider()
+                    .frame(height: 24)
+                
+                // Fullscreen
+                Button(action: { appState.toggleFullscreen() }) {
+                    Image(systemName: "arrow.up.left.and.arrow.down.right")
+                        .font(.system(size: 14))
+                }
+                .buttonStyle(PlainButtonStyle())
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 8)
+        .background(Color(hex: "1e1e1e"))
+        .overlay(
+            Rectangle()
+                .frame(height: 1)
+                .foregroundColor(Color.black.opacity(0.5)),
+            alignment: .top
+        )
+    }
+}
+
+// MARK: - Sheets
+
+struct NewProjectSheet: View {
+    @EnvironmentObject var appState: AppState
+    @Environment(\.presentationMode) var presentationMode
+    
+    @State private var projectName = "Untitled Project"
+    @State private var selectedPreset = 0
+    @State private var customWidth = "1920"
+    @State private var customHeight = "1080"
+    @State private var frameRate = "60"
+    
+    let presets = [
+        ("4K UHD", 3840, 2160),
+        ("1080p HD", 1920, 1080),
+        ("720p HD", 1280, 720),
+        ("2K DCI", 2048, 1080),
+        ("4K DCI", 4096, 2160),
+        ("Social Media 9:16", 1080, 1920),
+        ("Custom", 0, 0)
+    ]
+    
+    var body: some View {
+        VStack(spacing: 24) {
+            // Header
+            VStack(spacing: 8) {
+                Image(systemName: "film.stack")
+                    .font(.system(size: 48))
+                    .foregroundColor(Color(hex: "f5a623"))
+                
+                Text("New Project")
+                    .font(.system(size: 24, weight: .bold))
+            }
+            
+            // Form
+            VStack(spacing: 16) {
+                // Project Name
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Project Name")
+                        .font(.system(size: 12))
+                        .foregroundColor(.gray)
+                    
+                    TextField("Enter project name", text: $projectName)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                }
+                
+                // Resolution Preset
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Resolution Preset")
+                        .font(.system(size: 12))
+                        .foregroundColor(.gray)
+                    
+                    Picker("", selection: $selectedPreset) {
+                        ForEach(0..<presets.count, id: \.self) { index in
+                            Text(presets[index].0).tag(index)
+                        }
+                    }
+                    .pickerStyle(MenuPickerStyle())
+                }
+                
+                // Custom Resolution
+                if selectedPreset == presets.count - 1 {
+                    HStack(spacing: 12) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Width")
+                                .font(.system(size: 11))
+                                .foregroundColor(.gray)
+                            TextField("1920", text: $customWidth)
+                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                                .frame(width: 80)
+                        }
+                        
+                        Text("×")
+                            .foregroundColor(.gray)
+                        
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Height")
+                                .font(.system(size: 11))
+                                .foregroundColor(.gray)
+                            TextField("1080", text: $customHeight)
+                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                                .frame(width: 80)
+                        }
+                    }
+                }
+                
+                // Frame Rate
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Frame Rate")
+                        .font(.system(size: 12))
+                        .foregroundColor(.gray)
+                    
+                    Picker("", selection: $frameRate) {
+                        Text("24 fps").tag("24")
+                        Text("25 fps").tag("25")
+                        Text("30 fps").tag("30")
+                        Text("48 fps").tag("48")
+                        Text("50 fps").tag("50")
+                        Text("60 fps").tag("60")
+                    }
+                    .pickerStyle(SegmentedPickerStyle())
+                }
+            }
+            .frame(width: 320)
+            
+            // Buttons
+            HStack(spacing: 12) {
+                Button("Cancel") {
+                    presentationMode.wrappedValue.dismiss()
+                }
+                .keyboardShortcut(.cancelAction)
+                
+                Button("Create") {
+                    let preset = presets[selectedPreset]
+                    let w = selectedPreset == presets.count - 1 ? (Double(customWidth) ?? 1920) : Double(preset.1)
+                    let h = selectedPreset == presets.count - 1 ? (Double(customHeight) ?? 1080) : Double(preset.2)
+                    let fps = Double(frameRate) ?? 30
+                    
+                    appState.createNewProject(
+                        name: projectName,
+                        resolution: VideoSize(width: w, height: h),
+                        frameRate: fps
+                    )
+                    
+                    presentationMode.wrappedValue.dismiss()
+                }
+                .keyboardShortcut(.defaultAction)
+                .buttonStyle(BorderedProminentButtonStyle())
+            }
+        }
+        .padding(30)
+        .frame(width: 400)
+    }
+}
+
+struct ExportSheet: View {
+    @EnvironmentObject var appState: AppState
+    @Environment(\.presentationMode) var presentationMode
+    
+    @State private var selectedFormat = 0
+    @State private var selectedPreset = 0
+    @State private var fileName = "Untitled"
+    @State private var location = "~/Movies/"
+    
+    let formats = ["QuickTime", "MP4", "MXF", "DPX", "EXR"]
+    let presets = ["YouTube 1080p", "YouTube 4K", "Vimeo", "ProRes 422 HQ", "H.264", "H.265"]
+    
+    var body: some View {
+        VStack(spacing: 20) {
+            // Header
+            HStack {
+                Image(systemName: "square.and.arrow.up")
+                    .font(.system(size: 24))
+                    .foregroundColor(Color(hex: "f5a623"))
+                
+                Text("Deliver")
+                    .font(.system(size: 20, weight: .bold))
+                
+                Spacer()
+            }
+            
+            // Format Selection
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Render Settings")
+                    .font(.system(size: 12))
+                    .foregroundColor(.gray)
+                
+                Picker("Format", selection: $selectedFormat) {
+                    ForEach(0..<formats.count, id: \.self) { index in
+                        Text(formats[index]).tag(index)
+                    }
+                }
+                .pickerStyle(MenuPickerStyle())
+                
+                Picker("Preset", selection: $selectedPreset) {
+                    ForEach(0..<presets.count, id: \.self) { index in
+                        Text(presets[index]).tag(index)
+                    }
+                }
+                .pickerStyle(MenuPickerStyle())
+            }
+            
+            // Location
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Location")
+                    .font(.system(size: 12))
+                    .foregroundColor(.gray)
+                
+                HStack {
+                    TextField("File name", text: $fileName)
+                    
+                    Button("Browse...") { }
+                        .font(.system(size: 11))
+                }
+            }
+            
+            // Estimates
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Estimated Size:")
+                        .font(.system(size: 11))
+                        .foregroundColor(.gray)
+                    Text("~ 2.3 GB")
+                        .font(.system(size: 12))
+                }
+                
+                Spacer()
+                
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text("Estimated Time:")
+                        .font(.system(size: 11))
+                        .foregroundColor(.gray)
+                    Text("~ 15 minutes")
+                        .font(.system(size: 12))
+                }
+            }
+            
+            Spacer()
+            
+            // Progress (if exporting)
+            if appState.isExporting {
+                VStack(spacing: 8) {
+                    ProgressView(value: appState.exportProgress)
+                    
+                    Text("Rendering... \(Int(appState.exportProgress * 100))%")
+                        .font(.system(size: 11))
+                        .foregroundColor(.gray)
+                }
+            }
+            
+            // Buttons
+            HStack(spacing: 12) {
+                Button("Cancel") {
+                    presentationMode.wrappedValue.dismiss()
+                }
+                .keyboardShortcut(.cancelAction)
+                
+                Button(appState.isExporting ? "Stop" : "Add to Render Queue") {
+                    if !appState.isExporting {
+                        appState.isExporting = true
+                    }
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(appState.currentProject == nil)
+            }
+        }
+        .padding(24)
+        .frame(width: 420, height: 400)
+    }
+}
+
+struct ExportSettingsSheet: View {
+    @Environment(\.presentationMode) var presentationMode
+    
+    var body: some View {
+        VStack(spacing: 20) {
+            Text("Project Settings")
+                .font(.system(size: 18, weight: .bold))
+            
+            Text("Configure your project settings here.")
+                .font(.system(size: 12))
+                .foregroundColor(.gray)
+            
+            Spacer()
+            
+            Button("Close") {
+                presentationMode.wrappedValue.dismiss()
+            }
+            .keyboardShortcut(.defaultAction)
+        }
+        .padding(24)
+        .frame(width: 400, height: 300)
+    }
+}
+
+// MARK: - Color Extension
+
+extension Color {
+    init(hex: String) {
+        let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        var int: UInt64 = 0
+        Scanner(string: hex).scanHexInt64(&int)
+        let a, r, g, b: UInt64
+        switch hex.count {
+        case 3: // RGB (12-bit)
+            (a, r, g, b) = (255, (int >> 8) * 17, (int >> 4 & 0xF) * 17, (int & 0xF) * 17)
+        case 6: // RGB (24-bit)
+            (a, r, g, b) = (255, int >> 16, int >> 8 & 0xFF, int & 0xFF)
+        case 8: // ARGB (32-bit)
+            (a, r, g, b) = (int >> 24, int >> 16 & 0xFF, int >> 8 & 0xFF, int & 0xFF)
+        default:
+            (a, r, g, b) = (1, 1, 1, 0)
+        }
+        
+        self.init(
+            .sRGB,
+            red: Double(r) / 255,
+            green: Double(g) / 255,
+            blue:  Double(b) / 255,
+            opacity: Double(a) / 255
+        )
+    }
+}
+
+// MARK: - Triangle Shape
+
+struct Triangle: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.midX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.closeSubpath()
+        return path
+    }
+}
